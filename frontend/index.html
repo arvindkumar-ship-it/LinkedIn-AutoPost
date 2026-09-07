@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Event LinkedIn Autopost</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Event LinkedIn Autopost</h1>
+
+    <section>
+      <h2>LinkedIn Connection</h2>
+      <div id="authStatus">Checking...</div>
+      <button id="connectLinkedInBtn" style="display:none;">Connect LinkedIn</button>
+    </section>
+
+    <section>
+      <h2>Event Config</h2>
+      <form id="eventConfigForm">
+        <label>Event Name</label>
+        <input type="text" id="eventName" required />
+        <label>Tagline</label>
+        <input type="text" id="eventTagline" required />
+        <label>Audience</label>
+        <input type="text" id="eventAudience" required />
+        <label>Tone</label>
+        <input type="text" id="eventTone" required />
+        <label>Default Hashtags (comma separated)</label>
+        <input type="text" id="eventHashtags" required />
+        <button type="submit">Save Config</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>New Input</h2>
+      <form id="inputForm">
+        <label>Type</label>
+        <input type="text" id="inputType" value="update" />
+        <label>Title</label>
+        <input type="text" id="inputTitle" required />
+        <label>Text</label>
+        <textarea id="inputText" required></textarea>
+        <label>Image (optional)</label>
+        <input type="file" id="inputImageFile" accept="image/*" />
+        <label>Priority</label>
+        <select id="inputPriority">
+          <option value="normal">normal</option>
+          <option value="high">high</option>
+        </select>
+        <button type="submit">Submit Input</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Pending Inputs</h2>
+      <div id="pendingList"></div>
+    </section>
+
+    <section>
+      <h2>Posts</h2>
+      <div id="postsList"></div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

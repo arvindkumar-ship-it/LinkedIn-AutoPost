@@ -102,3 +102,5 @@ That creates a pending input — you still preview + approve before it posts.
   `uvicorn main:app --host 0.0.0.0 --port $PORT`, set the same env vars, and
   update `LINKEDIN_REDIRECT_URI` + the app's redirect URL to the deployed URL.
 - Frontend → any static host (Vercel/Netlify), just update `API_BASE` in `app.js`.
+
+Audit repair scope, reproducible checks and remaining limitations: [AUDIT_FIXES.md](AUDIT_FIXES.md).

@@ -1,5 +1,9 @@
 import json
 import os
+import tempfile
+import threading
+import copy
+from functools import wraps
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -16,7 +20,7 @@ _EMPTY_DB = {
 
 def load_db() -> Dict[str, Any]:
     if not os.path.exists(DB_PATH):
-        return dict(_EMPTY_DB)
+        return copy.deepcopy(_EMPTY_DB)
     with open(DB_PATH, "r", encoding="utf-8") as f:
         db = json.load(f)
     # backfill keys for dbs created before oauth support existed
@@ -25,13 +29,33 @@ def load_db() -> Dict[str, Any]:
     return db
 
 
+_lock = threading.RLock()
+
+
+def serialized(func):
+    @wraps(func)
+    def locked(*args, **kwargs):
+        with _lock:
+            return func(*args, **kwargs)
+    return locked
+
+
 def save_db(data: Dict[str, Any]) -> None:
-    with open(DB_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    directory = os.path.dirname(os.path.abspath(DB_PATH))
+    fd, temporary = tempfile.mkstemp(prefix='.autopost-', dir=directory)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as output:
+            json.dump(data, output, indent=2, ensure_ascii=False)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, DB_PATH)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
 
 
 # ---------- Inputs ----------
 
+@serialized
 def add_input(input_data: Dict[str, Any]) -> Dict[str, Any]:
     db = load_db()
     input_data["id"] = f"inp_{len(db['inputs']) + 1}"
@@ -50,6 +74,7 @@ def get_input(input_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+@serialized
 def update_input(input_id: str, updates: Dict[str, Any]) -> None:
     db = load_db()
     for inp in db["inputs"]:
@@ -66,6 +91,7 @@ def get_pending_inputs() -> List[Dict[str, Any]]:
 
 # ---------- Posts ----------
 
+@serialized
 def add_post(post_data: Dict[str, Any]) -> Dict[str, Any]:
     db = load_db()
     post_data["id"] = f"post_{len(db['posts']) + 1}"
@@ -82,6 +108,7 @@ def get_all_posts() -> List[Dict[str, Any]]:
 
 # ---------- Event config ----------
 
+@serialized
 def set_event_config(config: Dict[str, Any]) -> None:
     db = load_db()
     db["event_config"] = config
@@ -95,6 +122,7 @@ def get_event_config() -> Dict[str, Any]:
 
 # ---------- OAuth ----------
 
+@serialized
 def set_oauth_state(state: str) -> None:
     db = load_db()
     db["oauth_state"] = state
@@ -106,6 +134,7 @@ def get_oauth_state() -> Optional[str]:
     return db.get("oauth_state")
 
 
+@serialized
 def store_tokens(access_token: str, person_urn: str) -> None:
     db = load_db()
     db["oauth"] = {"access_token": access_token, "person_urn": person_urn}
@@ -115,3 +144,13 @@ def store_tokens(access_token: str, person_urn: str) -> None:
 def get_stored_tokens() -> Optional[Dict[str, Any]]:
     db = load_db()
     return db.get("oauth")
+
+
+@serialized
+def consume_oauth_state(state: str) -> bool:
+    db = load_db()
+    if not state or state != db.get('oauth_state'):
+        return False
+    db['oauth_state'] = None
+    save_db(db)
+    return True

@@ -1,15 +1,24 @@
 const API_BASE = "http://localhost:8000";
+function apiFetch(url, options = {}) { return fetch(url, { ...options, credentials: "include" }); }
+document.getElementById("workspaceLogin").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const response = await apiFetch(`${API_BASE}/session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ access_code: document.getElementById("accessCode").value }) });
+  if (!response.ok) return alert("Workspace login failed");
+  document.getElementById("accessCode").value = "";
+  checkAuthStatus(); loadPendingInputs(); loadPosts();
+});
 
 // ---------- LinkedIn connection ----------
 
 async function checkAuthStatus() {
-  const res = await fetch(`${API_BASE}/auth/status`);
+  const res = await apiFetch(`${API_BASE}/auth/status`);
+  if (!res.ok) { document.getElementById("authStatus").textContent = "Workspace login required"; return; }
   const data = await res.json();
   const statusDiv = document.getElementById("authStatus");
   const connectBtn = document.getElementById("connectLinkedInBtn");
 
   if (data.connected) {
-    statusDiv.innerHTML = `✅ Connected to LinkedIn (${data.person_urn})`;
+    statusDiv.textContent = `✅ Connected to LinkedIn (${data.person_urn})`;
     connectBtn.style.display = "none";
   } else {
     statusDiv.innerHTML = "❌ Not connected to LinkedIn";
@@ -32,7 +41,7 @@ document.getElementById("eventConfigForm").addEventListener("submit", async (e) 
     tone: document.getElementById("eventTone").value,
     default_hashtags: document.getElementById("eventHashtags").value.split(",").map(s => s.trim()),
   };
-  const res = await fetch(`${API_BASE}/event/config`, {
+  const res = await apiFetch(`${API_BASE}/event/config`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -52,7 +61,7 @@ document.getElementById("inputForm").addEventListener("submit", async (e) => {
     image_url: null,
     priority: document.getElementById("inputPriority").value,
   };
-  const res = await fetch(`${API_BASE}/inputs`, {
+  const res = await apiFetch(`${API_BASE}/inputs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -63,7 +72,7 @@ document.getElementById("inputForm").addEventListener("submit", async (e) => {
   if (fileInput.files.length > 0) {
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
-    const uploadRes = await fetch(`${API_BASE}/inputs/${data.id}/image`, {
+    const uploadRes = await apiFetch(`${API_BASE}/inputs/${data.id}/image`, {
       method: "POST",
       body: formData,
     });
@@ -79,7 +88,8 @@ document.getElementById("inputForm").addEventListener("submit", async (e) => {
 });
 
 async function loadPendingInputs() {
-  const res = await fetch(`${API_BASE}/inputs/pending`);
+  const res = await apiFetch(`${API_BASE}/inputs/pending`);
+  if (!res.ok) return;
   const inputs = await res.json();
   const container = document.getElementById("pendingList");
   container.innerHTML = "";
@@ -88,9 +98,9 @@ async function loadPendingInputs() {
     div.className = "item";
     const imageBadge = inp.image_url ? " 📷" : "";
     div.innerHTML = `
-      <h3>${inp.title} (${inp.type})${imageBadge}</h3>
-      <p>${inp.text}</p>
-      <p class="small">ID: ${inp.id} | Priority: ${inp.priority}</p>
+      <h3>${escapeHtml(inp.title)} (${escapeHtml(inp.type)})${imageBadge}</h3>
+      <p>${escapeHtml(inp.text)}</p>
+      <p class="small">ID: ${inp.id} | Priority: ${escapeHtml(inp.priority)}</p>
       <button onclick="generatePreview('${inp.id}')">Generate Preview</button>
       <div id="preview-${inp.id}" style="margin-top:8px;"></div>
     `;
@@ -99,7 +109,7 @@ async function loadPendingInputs() {
 }
 
 async function generatePreview(inputId) {
-  const res = await fetch(`${API_BASE}/inputs/${inputId}/generate`, { method: "POST" });
+  const res = await apiFetch(`${API_BASE}/inputs/${inputId}/generate`, { method: "POST" });
   const data = await res.json();
   const previewDiv = document.getElementById(`preview-${inputId}`);
   previewDiv.innerHTML = `
@@ -111,7 +121,7 @@ async function generatePreview(inputId) {
 
 async function approveAndPost(inputId) {
   const genText = document.getElementById(`gen-text-${inputId}`).value;
-  const res = await fetch(`${API_BASE}/inputs/${inputId}/approve`, {
+  const res = await apiFetch(`${API_BASE}/inputs/${inputId}/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ generated_text: genText }),
@@ -128,7 +138,8 @@ async function approveAndPost(inputId) {
 }
 
 async function loadPosts() {
-  const res = await fetch(`${API_BASE}/posts`);
+  const res = await apiFetch(`${API_BASE}/posts`);
+  if (!res.ok) return;
   const posts = await res.json();
   const container = document.getElementById("postsList");
   container.innerHTML = "";

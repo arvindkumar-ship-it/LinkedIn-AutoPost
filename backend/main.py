@@ -1,10 +1,14 @@
 import secrets
 from typing import List, Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+import os
+import hmac
+from security import access_key, issue_session, authorized
 
 import scheduler
 from config import Config
@@ -17,6 +21,7 @@ from storage import (
     get_event_config,
     get_input,
     get_oauth_state,
+    consume_oauth_state,
     get_pending_inputs,
     get_stored_tokens,
     set_event_config,
@@ -29,7 +34,7 @@ app = FastAPI(title="LinkedIn Event Autopost")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,6 +49,29 @@ def load_stored_oauth() -> None:
     if tokens:
         Config.LINKEDIN_ACCESS_TOKEN = tokens["access_token"]
         Config.LINKEDIN_PERSON_URN = tokens["person_urn"]
+
+
+@app.middleware("http")
+async def owner_access(request: Request, call_next):
+    if request.url.path not in {"/session", "/docs", "/openapi.json", "/redoc"} and request.method != "OPTIONS":
+        try:
+            if not authorized(request):
+                raise HTTPException(401, "Workspace login required")
+        except HTTPException as error:
+            return JSONResponse({"detail": error.detail}, status_code=error.status_code)
+    return await call_next(request)
+
+
+class SessionRequest(BaseModel):
+    access_code: str
+
+
+@app.post("/session")
+def login_workspace(payload: SessionRequest, response: Response):
+    if not hmac.compare_digest(payload.access_code, access_key()):
+        raise HTTPException(401, "Invalid access code")
+    response.set_cookie("autopost_session", issue_session(), httponly=True, samesite="lax", secure=os.getenv("COOKIE_SECURE", "false").lower() == "true", max_age=3600)
+    return {"authenticated": True}
 
 
 # ---------- Request/response models ----------
@@ -92,8 +120,7 @@ def start_linkedin_auth():
 
 @app.get("/callback")
 async def linkedin_callback(code: str, state: str):
-    stored_state = get_oauth_state()
-    if state != stored_state:
+    if not consume_oauth_state(state):
         raise HTTPException(status_code=400, detail="Invalid state")
 
     token_data = await exchange_code_for_token(code)
@@ -104,7 +131,7 @@ async def linkedin_callback(code: str, state: str):
     Config.LINKEDIN_ACCESS_TOKEN = access_token
     Config.LINKEDIN_PERSON_URN = person_urn
 
-    return RedirectResponse(url="http://127.0.0.1:3000/index.html?connected=true")
+    return RedirectResponse(url=os.getenv("FRONTEND_ORIGIN", "http://localhost:3000") + "/index.html?connected=true")
 
 
 @app.get("/auth/status")
